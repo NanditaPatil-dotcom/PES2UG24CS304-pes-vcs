@@ -273,7 +273,12 @@ int index_load(Index *index) {
         return -1;
     }
 
-    return fclose(f) == 0 ? 0 : -1;
+    if (fclose(f) != 0) {
+        return -1;
+    }
+
+    qsort(index->entries, index->count, sizeof(IndexEntry), compare_index_entries_by_path);
+    return 0;
 }
 
 // Save the index to .pes/index atomically.
