@@ -36,6 +36,16 @@ echo "hello world" > hello.txt
 $PES add file.txt hello.txt
 echo "Status after add:"
 $PES status
+echo "Missing-file diagnostics:"
+$PES add missing.txt 2>add_missing.err || true
+grep -q "pathspec 'missing.txt' did not match any file" add_missing.err \
+    && echo "PASS: missing file reports a clear error" \
+    || { echo "FAIL: missing file error was unclear"; cat add_missing.err; exit 1; }
+if grep -q "failed to add 'missing.txt'" add_missing.err; then
+    echo "FAIL: missing file printed a redundant generic error"
+    cat add_missing.err
+    exit 1
+fi
 echo ""
 
 # ── First Commit ───────────────────────────────────────────────────────────

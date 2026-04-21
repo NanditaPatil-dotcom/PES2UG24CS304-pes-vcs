@@ -48,9 +48,7 @@ void cmd_add(int argc, char *argv[]) {
     }
 
     for (int i = 2; i < argc; i++) {
-        if (index_add(&index, argv[i]) != 0) {
-            fprintf(stderr, "error: failed to add '%s'\n", argv[i]);
-        }
+        index_add(&index, argv[i]);
     }
 }
 

@@ -110,6 +110,21 @@ static int path_is_stageable(const char *path) {
     return 1;
 }
 
+static int report_add_error(const char *path, const char *message) {
+    fprintf(stderr, "error: %s '%s'\n", message, path ? path : "(null)");
+    return -1;
+}
+
+static int report_add_errno(const char *path, const char *message) {
+    fprintf(stderr, "error: %s '%s': %s\n", message, path ? path : "(null)", strerror(errno));
+    return -1;
+}
+
+static int report_missing_pathspec(const char *path) {
+    fprintf(stderr, "error: pathspec '%s' did not match any file\n", path ? path : "(null)");
+    return -1;
+}
+
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
 
 // Find an index entry by path (linear scan).
@@ -364,32 +379,51 @@ int index_save(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_add(Index *index, const char *path) {
-    if (!index || !path_is_stageable(path) || strlen(path) >= sizeof(index->entries[0].path)) {
+    if (!index) {
         return -1;
     }
 
+    if (!path_is_stageable(path)) {
+        return report_add_error(path, "cannot stage");
+    }
+
+    if (strlen(path) >= sizeof(index->entries[0].path)) {
+        return report_add_error(path, "path is too long to stage");
+    }
+
     struct stat st;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size < 0 || (uint64_t)st.st_size > UINT32_MAX) {
-        return -1;
+    if (stat(path, &st) != 0) {
+        if (errno == ENOENT) {
+            return report_missing_pathspec(path);
+        }
+        return report_add_errno(path, "failed to stat");
+    }
+
+    if (!S_ISREG(st.st_mode)) {
+        return report_add_error(path, "is not a regular file");
+    }
+
+    if (st.st_size < 0 || (uint64_t)st.st_size > UINT32_MAX) {
+        return report_add_error(path, "is too large to stage");
     }
 
     unsigned char *contents = NULL;
     size_t len = 0;
     if (read_file_contents(path, &contents, &len) != 0) {
-        return -1;
+        return report_add_errno(path, "failed to read");
     }
 
     ObjectID blob_id;
     int rc = object_write(OBJ_BLOB, contents, len, &blob_id);
     free(contents);
     if (rc != 0) {
-        return -1;
+        return report_add_error(path, "failed to store blob for");
     }
 
     IndexEntry *entry = index_find(index, path);
     if (!entry) {
         if (index->count >= MAX_INDEX_ENTRIES) {
-            return -1;
+            return report_add_error(path, "cannot stage because the index is full for");
         }
         entry = &index->entries[index->count++];
     }
@@ -400,5 +434,9 @@ int index_add(Index *index, const char *path) {
     entry->size = (uint32_t)st.st_size;
     snprintf(entry->path, sizeof(entry->path), "%s", path);
 
-    return index_save(index);
+    if (index_save(index) != 0) {
+        return report_add_error(path, "failed to update index for");
+    }
+
+    return 0;
 }
