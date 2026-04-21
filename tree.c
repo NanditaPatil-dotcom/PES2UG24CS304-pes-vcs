@@ -150,6 +150,75 @@ static int next_path_component(const char *path, char *name_out, size_t name_out
     return 0;
 }
 
+static TreeEntry *find_tree_entry(Tree *tree, const char *name) {
+    for (int i = 0; i < tree->count; i++) {
+        if (strcmp(tree->entries[i].name, name) == 0) {
+            return &tree->entries[i];
+        }
+    }
+    return NULL;
+}
+
+static int store_tree_object(const Tree *tree, ObjectID *id_out) {
+    if (tree->count == 0) {
+        return object_write(OBJ_TREE, "", 0, id_out);
+    }
+
+    void *data = NULL;
+    size_t len = 0;
+    if (tree_serialize(tree, &data, &len) != 0) {
+        return -1;
+    }
+
+    int rc = object_write(OBJ_TREE, data, len, id_out);
+    free(data);
+    return rc;
+}
+
+static int write_tree_level(const Index *index, const char *prefix, ObjectID *id_out) {
+    Tree tree = {0};
+
+    for (int i = 0; i < index->count; i++) {
+        const IndexEntry *index_entry = &index->entries[i];
+        const char *relative_path = path_after_prefix(index_entry->path, prefix);
+        if (!relative_path || relative_path[0] == '\0') {
+            continue;
+        }
+
+        char name[256];
+        int is_subdir = 0;
+        if (next_path_component(relative_path, name, sizeof(name), &is_subdir) != 0) {
+            return -1;
+        }
+
+        if (find_tree_entry(&tree, name) != NULL) {
+            continue;
+        }
+
+        if (tree.count >= MAX_TREE_ENTRIES) {
+            return -1;
+        }
+
+        TreeEntry *tree_entry = &tree.entries[tree.count++];
+        snprintf(tree_entry->name, sizeof(tree_entry->name), "%s", name);
+
+        if (!is_subdir) {
+            tree_entry->mode = index_entry->mode;
+            tree_entry->hash = index_entry->hash;
+            continue;
+        }
+
+        char child_prefix[512];
+        snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, name);
+        tree_entry->mode = MODE_DIR;
+        if (write_tree_level(index, child_prefix, &tree_entry->hash) != 0) {
+            return -1;
+        }
+    }
+
+    return store_tree_object(&tree, id_out);
+}
+
 // Serialize a Tree struct into binary format for storage.
 // Caller must free(*data_out).
 // Returns 0 on success, -1 on error.
@@ -197,8 +266,14 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
-    (void)id_out;
-    return -1;
+    if (!id_out) {
+        return -1;
+    }
+
+    Index index;
+    if (load_index_snapshot(&index) != 0) {
+        return -1;
+    }
+
+    return write_tree_level(&index, "", id_out);
 }
