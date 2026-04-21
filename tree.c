@@ -123,6 +123,33 @@ static int load_index_snapshot(Index *index) {
     return 0;
 }
 
+static int path_has_prefix(const char *path, const char *prefix) {
+    size_t prefix_len = strlen(prefix);
+    return strncmp(path, prefix, prefix_len) == 0;
+}
+
+static const char *path_after_prefix(const char *path, const char *prefix) {
+    if (!path_has_prefix(path, prefix)) {
+        return NULL;
+    }
+    return path + strlen(prefix);
+}
+
+static int next_path_component(const char *path, char *name_out, size_t name_out_size,
+                               int *is_subdir_out) {
+    const char *slash = strchr(path, '/');
+    size_t name_len = slash ? (size_t)(slash - path) : strlen(path);
+
+    if (name_len == 0 || name_len >= name_out_size) {
+        return -1;
+    }
+
+    memcpy(name_out, path, name_len);
+    name_out[name_len] = '\0';
+    *is_subdir_out = slash != NULL;
+    return 0;
+}
+
 // Serialize a Tree struct into binary format for storage.
 // Caller must free(*data_out).
 // Returns 0 on success, -1 on error.
