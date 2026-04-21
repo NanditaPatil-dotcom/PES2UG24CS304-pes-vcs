@@ -162,9 +162,95 @@ static int fsync_directory(const char *path) {
 //
 // Returns 0 on success, -1 on error.
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
-    // TODO: Implement
-    (void)type; (void)data; (void)len; (void)id_out;
-    return -1;
+    const char *type_name = object_type_name(type);
+    if (!type_name || !id_out || (!data && len > 0)) {
+        return -1;
+    }
+
+    int header_len = snprintf(NULL, 0, "%s %zu", type_name, len);
+    if (header_len < 0) {
+        return -1;
+    }
+
+    size_t object_len = (size_t)header_len + 1 + len;
+    unsigned char *object_buf = malloc(object_len);
+    if (!object_buf) {
+        return -1;
+    }
+
+    snprintf((char *)object_buf, (size_t)header_len + 1, "%s %zu", type_name, len);
+    if (len > 0) {
+        memcpy(object_buf + header_len + 1, data, len);
+    }
+
+    compute_hash(object_buf, object_len, id_out);
+    if (object_exists(id_out)) {
+        free(object_buf);
+        return 0;
+    }
+
+    char final_path[512];
+    char shard_dir[512];
+    char tmp_path[512];
+    int fd = -1;
+    int renamed = 0;
+
+    object_path(id_out, final_path, sizeof(final_path));
+    snprintf(shard_dir, sizeof(shard_dir), "%s", final_path);
+    char *slash = strrchr(shard_dir, '/');
+    if (!slash) {
+        free(object_buf);
+        return -1;
+    }
+    *slash = '\0';
+
+    if (ensure_directory(PES_DIR) != 0 ||
+        ensure_directory(OBJECTS_DIR) != 0 ||
+        ensure_directory(shard_dir) != 0) {
+        free(object_buf);
+        return -1;
+    }
+
+    snprintf(tmp_path, sizeof(tmp_path), "%s/.tmp-object-XXXXXX", shard_dir);
+    fd = mkstemp(tmp_path);
+    if (fd < 0) {
+        free(object_buf);
+        return -1;
+    }
+
+    if (write_all(fd, object_buf, object_len) != 0 ||
+        fsync(fd) != 0 ||
+        close(fd) != 0) {
+        int saved_errno = errno;
+        close(fd);
+        unlink(tmp_path);
+        free(object_buf);
+        errno = saved_errno;
+        return -1;
+    }
+    fd = -1;
+
+    if (rename(tmp_path, final_path) != 0) {
+        int saved_errno = errno;
+        unlink(tmp_path);
+        free(object_buf);
+        errno = saved_errno;
+        return -1;
+    }
+    renamed = 1;
+
+    if (fsync_directory(shard_dir) != 0) {
+        int saved_errno = errno;
+        if (!renamed) {
+            unlink(tmp_path);
+        }
+        free(object_buf);
+        errno = saved_errno;
+        return -1;
+    }
+
+    free(object_buf);
+    return 0;
 }
 
 // Read an object from the store.
