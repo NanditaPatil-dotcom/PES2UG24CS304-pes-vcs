@@ -150,6 +150,34 @@ static int next_path_component(const char *path, char *name_out, size_t name_out
     return 0;
 }
 
+static int path_is_valid_for_tree(const char *path) {
+    if (!path || path[0] == '\0' || path[0] == '/') {
+        return 0;
+    }
+
+    const char *segment = path;
+    while (*segment != '\0') {
+        const char *slash = strchr(segment, '/');
+        size_t segment_len = slash ? (size_t)(slash - segment) : strlen(segment);
+
+        if (segment_len == 0 || segment_len >= sizeof(((TreeEntry *)0)->name)) {
+            return 0;
+        }
+
+        if (!slash) {
+            return 1;
+        }
+
+        if (slash[1] == '\0') {
+            return 0;
+        }
+
+        segment = slash + 1;
+    }
+
+    return 1;
+}
+
 static TreeEntry *find_tree_entry(Tree *tree, const char *name) {
     for (int i = 0; i < tree->count; i++) {
         if (strcmp(tree->entries[i].name, name) == 0) {
@@ -273,6 +301,12 @@ int tree_from_index(ObjectID *id_out) {
     Index index;
     if (load_index_snapshot(&index) != 0) {
         return -1;
+    }
+
+    for (int i = 0; i < index.count; i++) {
+        if (!path_is_valid_for_tree(index.entries[i].path)) {
+            return -1;
+        }
     }
 
     return write_tree_level(&index, "", id_out);
