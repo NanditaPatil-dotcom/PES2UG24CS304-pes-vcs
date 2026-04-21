@@ -46,6 +46,27 @@ static void commit_set_parent(Commit *commit, const ObjectID *parent) {
     }
 }
 
+static int head_is_unborn(void) {
+    FILE *f = fopen(HEAD_FILE, "r");
+    if (!f) return 0;
+
+    char line[512];
+    if (!fgets(line, sizeof(line), f)) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+
+    line[strcspn(line, "\r\n")] = '\0';
+    if (strncmp(line, "ref: ", 5) != 0) {
+        return 0;
+    }
+
+    char ref_path[512];
+    snprintf(ref_path, sizeof(ref_path), "%s/%s", PES_DIR, line + 5);
+    return access(ref_path, F_OK) != 0;
+}
+
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
 
 // Parse raw commit data into a Commit struct.
@@ -224,8 +245,11 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     }
 
     ObjectID parent;
-    if (head_read(&parent) == 0) {
+    int head_rc = head_read(&parent);
+    if (head_rc == 0) {
         commit_set_parent(&commit, &parent);
+    } else if (!head_is_unborn()) {
+        return -1;
     }
 
     void *serialized = NULL;
