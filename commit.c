@@ -29,6 +29,23 @@
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out);
 
+static void commit_init(Commit *commit, const char *message) {
+    memset(commit, 0, sizeof(*commit));
+    commit->timestamp = (uint64_t)time(NULL);
+    snprintf(commit->author, sizeof(commit->author), "%s", pes_author());
+    snprintf(commit->message, sizeof(commit->message), "%s", message ? message : "");
+}
+
+static void commit_set_parent(Commit *commit, const ObjectID *parent) {
+    if (parent) {
+        commit->parent = *parent;
+        commit->has_parent = 1;
+    } else {
+        memset(&commit->parent, 0, sizeof(commit->parent));
+        commit->has_parent = 0;
+    }
+}
+
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
 
 // Parse raw commit data into a Commit struct.
@@ -194,8 +211,18 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
+    if (!message || !commit_id_out) {
+        return -1;
+    }
+
+    Commit commit;
+    commit_init(&commit, message);
+    commit_set_parent(&commit, NULL);
+
+    if (tree_from_index(&commit.tree) != 0) {
+        return -1;
+    }
+
+    (void)commit_id_out;
     return -1;
 }
