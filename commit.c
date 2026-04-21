@@ -228,6 +228,23 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         commit_set_parent(&commit, &parent);
     }
 
-    (void)commit_id_out;
-    return -1;
+    void *serialized = NULL;
+    size_t serialized_len = 0;
+    if (commit_serialize(&commit, &serialized, &serialized_len) != 0) {
+        return -1;
+    }
+
+    ObjectID commit_id;
+    int rc = object_write(OBJ_COMMIT, serialized, serialized_len, &commit_id);
+    free(serialized);
+    if (rc != 0) {
+        return -1;
+    }
+
+    if (head_update(&commit_id) != 0) {
+        return -1;
+    }
+
+    *commit_id_out = commit_id;
+    return 0;
 }
