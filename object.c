@@ -9,6 +9,7 @@
 // TODO functions:     object_write, object_read
 
 #include "pes.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +59,35 @@ int object_exists(const ObjectID *id) {
     char path[512];
     object_path(id, path, sizeof(path));
     return access(path, F_OK) == 0;
+}
+
+static const char *object_type_name(ObjectType type) {
+    switch (type) {
+        case OBJ_BLOB:
+            return "blob";
+        case OBJ_TREE:
+            return "tree";
+        case OBJ_COMMIT:
+            return "commit";
+        default:
+            return NULL;
+    }
+}
+
+static int object_type_from_name(const char *name, ObjectType *type_out) {
+    if (strcmp(name, "blob") == 0) {
+        *type_out = OBJ_BLOB;
+        return 0;
+    }
+    if (strcmp(name, "tree") == 0) {
+        *type_out = OBJ_TREE;
+        return 0;
+    }
+    if (strcmp(name, "commit") == 0) {
+        *type_out = OBJ_COMMIT;
+        return 0;
+    }
+    return -1;
 }
 
 // ─── TODO: Implement these ──────────────────────────────────────────────────
