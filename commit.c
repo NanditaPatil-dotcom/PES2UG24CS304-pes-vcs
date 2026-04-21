@@ -223,6 +223,11 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         return -1;
     }
 
+    ObjectID parent;
+    if (head_read(&parent) == 0) {
+        commit_set_parent(&commit, &parent);
+    }
+
     (void)commit_id_out;
     return -1;
 }
