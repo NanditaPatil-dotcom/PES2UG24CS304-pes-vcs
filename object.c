@@ -90,6 +90,44 @@ static int object_type_from_name(const char *name, ObjectType *type_out) {
     return -1;
 }
 
+static int ensure_directory(const char *path) {
+    if (mkdir(path, 0755) == 0 || errno == EEXIST) {
+        return 0;
+    }
+    return -1;
+}
+
+static int write_all(int fd, const void *buf, size_t len) {
+    const unsigned char *ptr = (const unsigned char *)buf;
+
+    while (len > 0) {
+        ssize_t written = write(fd, ptr, len);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        }
+        ptr += (size_t)written;
+        len -= (size_t)written;
+    }
+
+    return 0;
+}
+
+static int fsync_directory(const char *path) {
+    int dir_fd = open(path, O_RDONLY | O_DIRECTORY);
+    if (dir_fd < 0) {
+        return -1;
+    }
+
+    int rc = fsync(dir_fd);
+    int saved_errno = errno;
+    close(dir_fd);
+    errno = saved_errno;
+    return rc;
+}
+
 // ─── TODO: Implement these ──────────────────────────────────────────────────
 
 // Write an object to the store.
