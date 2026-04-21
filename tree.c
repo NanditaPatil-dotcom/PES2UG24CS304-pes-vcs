@@ -219,8 +219,12 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
             return -1;
         }
 
-        if (find_tree_entry(&tree, name) != NULL) {
-            continue;
+        TreeEntry *existing = find_tree_entry(&tree, name);
+        if (existing) {
+            if (is_subdir && existing->mode == MODE_DIR) {
+                continue;
+            }
+            return -1;
         }
 
         if (tree.count >= MAX_TREE_ENTRIES) {
@@ -228,7 +232,9 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
         }
 
         TreeEntry *tree_entry = &tree.entries[tree.count++];
-        snprintf(tree_entry->name, sizeof(tree_entry->name), "%s", name);
+        if (snprintf(tree_entry->name, sizeof(tree_entry->name), "%s", name) >= (int)sizeof(tree_entry->name)) {
+            return -1;
+        }
 
         if (!is_subdir) {
             tree_entry->mode = index_entry->mode;
@@ -237,7 +243,9 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
         }
 
         char child_prefix[512];
-        snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, name);
+        if (snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, name) >= (int)sizeof(child_prefix)) {
+            return -1;
+        }
         tree_entry->mode = MODE_DIR;
         if (write_tree_level(index, child_prefix, &tree_entry->hash) != 0) {
             return -1;
