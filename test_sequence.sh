@@ -53,7 +53,15 @@ echo "--- First Commit ---"
 $PES commit -m "Initial commit"
 echo ""
 echo "Log after first commit:"
-$PES log
+first_log="$($PES log)"
+printf '%s\n' "$first_log"
+if [ "$(printf '%s\n' "$first_log" | grep -c '^commit ')" -eq 1 ] \
+    && printf '%s\n' "$first_log" | grep -q "Initial commit"; then
+    echo "PASS: first commit is visible in history"
+else
+    echo "FAIL: first commit did not appear correctly in log"
+    exit 1
+fi
 echo ""
 
 # ── Modify and Recommit ───────────────────────────────────────────────────
@@ -71,7 +79,23 @@ $PES commit -m "Add farewell"
 echo ""
 
 echo "--- Full History ---"
-$PES log
+full_log="$($PES log)"
+printf '%s\n' "$full_log"
+if [ "$(printf '%s\n' "$full_log" | grep -c '^commit ')" -eq 3 ]; then
+    echo "PASS: log shows all three commits"
+else
+    echo "FAIL: expected three commits in log"
+    exit 1
+fi
+
+if printf '%s\n' "$full_log" | grep -q "Add farewell" \
+    && printf '%s\n' "$full_log" | grep -q "Update file.txt" \
+    && printf '%s\n' "$full_log" | grep -q "Initial commit"; then
+    echo "PASS: commit messages are preserved in history"
+else
+    echo "FAIL: commit messages were missing from history"
+    exit 1
+fi
 echo ""
 
 echo "--- Reference Chain ---"
@@ -79,6 +103,14 @@ echo "HEAD:"
 cat .pes/HEAD
 echo "refs/heads/main:"
 cat .pes/refs/heads/main
+latest_ref="$(cat .pes/refs/heads/main)"
+latest_log_commit="$(printf '%s\n' "$full_log" | awk '/^commit / { print $2; exit }')"
+if [ "$latest_ref" = "$latest_log_commit" ]; then
+    echo "PASS: branch ref matches the newest logged commit"
+else
+    echo "FAIL: branch ref and newest log entry diverged"
+    exit 1
+fi
 echo ""
 
 echo "--- Object Store ---"
