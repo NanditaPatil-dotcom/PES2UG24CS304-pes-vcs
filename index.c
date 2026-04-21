@@ -234,6 +234,12 @@ int index_load(Index *index) {
 
     char line[2048];
     while (fgets(line, sizeof(line), f) != NULL) {
+        size_t line_len = strlen(line);
+        if (line_len == 0 || (line[line_len - 1] != '\n' && !feof(f))) {
+            fclose(f);
+            return -1;
+        }
+
         if (index->count >= MAX_INDEX_ENTRIES) {
             fclose(f);
             return -1;
