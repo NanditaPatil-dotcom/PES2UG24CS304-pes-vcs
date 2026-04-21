@@ -40,6 +40,19 @@ static int ensure_pes_directory(void) {
     return -1;
 }
 
+static int fsync_directory_path(const char *path) {
+    int dir_fd = open(path, O_RDONLY | O_DIRECTORY);
+    if (dir_fd < 0) {
+        return -1;
+    }
+
+    int rc = fsync(dir_fd);
+    int saved_errno = errno;
+    close(dir_fd);
+    errno = saved_errno;
+    return rc;
+}
+
 static int read_file_contents(const char *path, unsigned char **buf_out, size_t *len_out) {
     FILE *f = fopen(path, "rb");
     if (!f) {
@@ -305,6 +318,9 @@ int index_save(const Index *index) {
     }
 
     if (rc == 0 && rename(tmp_path, INDEX_FILE) != 0) {
+        rc = -1;
+    }
+    if (rc == 0 && fsync_directory_path(PES_DIR) != 0) {
         rc = -1;
     }
     if (rc != 0) {
