@@ -98,6 +98,18 @@ static int read_file_contents(const char *path, unsigned char **buf_out, size_t 
     return 0;
 }
 
+static int path_is_stageable(const char *path) {
+    if (!path || path[0] == '\0' || path[0] == '/') {
+        return 0;
+    }
+
+    if (strncmp(path, ".pes", 4) == 0 && (path[4] == '\0' || path[4] == '/')) {
+        return 0;
+    }
+
+    return 1;
+}
+
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
 
 // Find an index entry by path (linear scan).
@@ -341,7 +353,7 @@ int index_save(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_add(Index *index, const char *path) {
-    if (!index || !path || path[0] == '\0' || strlen(path) >= sizeof(index->entries[0].path)) {
+    if (!index || !path_is_stageable(path) || strlen(path) >= sizeof(index->entries[0].path)) {
         return -1;
     }
 
