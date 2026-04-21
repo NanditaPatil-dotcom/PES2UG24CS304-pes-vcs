@@ -128,6 +128,80 @@ static int fsync_directory(const char *path) {
     return rc;
 }
 
+static int read_file_bytes(const char *path, unsigned char **buf_out, size_t *len_out) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return -1;
+    }
+
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return -1;
+    }
+
+    long file_size = ftell(f);
+    if (file_size < 0) {
+        fclose(f);
+        return -1;
+    }
+
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return -1;
+    }
+
+    size_t len = (size_t)file_size;
+    unsigned char *buf = malloc(len > 0 ? len : 1);
+    if (!buf) {
+        fclose(f);
+        return -1;
+    }
+
+    if (len > 0 && fread(buf, 1, len, f) != len) {
+        free(buf);
+        fclose(f);
+        return -1;
+    }
+
+    if (fclose(f) != 0) {
+        free(buf);
+        return -1;
+    }
+
+    *buf_out = buf;
+    *len_out = len;
+    return 0;
+}
+
+static int parse_object_header(const unsigned char *object_buf, size_t object_len,
+                               ObjectType *type_out, size_t *data_offset_out,
+                               size_t *data_len_out) {
+    const unsigned char *null_byte = memchr(object_buf, '\0', object_len);
+    if (!null_byte) {
+        return -1;
+    }
+
+    char type_name[16];
+    size_t declared_len;
+    char extra;
+    if (sscanf((const char *)object_buf, "%15s %zu %c", type_name, &declared_len, &extra) != 2) {
+        return -1;
+    }
+
+    if (object_type_from_name(type_name, type_out) != 0) {
+        return -1;
+    }
+
+    size_t data_offset = (size_t)(null_byte - object_buf) + 1;
+    if (declared_len != object_len - data_offset) {
+        return -1;
+    }
+
+    *data_offset_out = data_offset;
+    *data_len_out = declared_len;
+    return 0;
+}
+
 // ─── TODO: Implement these ──────────────────────────────────────────────────
 
 // Write an object to the store.
